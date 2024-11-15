@@ -1,0 +1,20 @@
+# 定义工作流的名称
+name: WRT-All
+
+# 定义触发条件
+on:
+  # 允许通过GitHub UI手动触发
+  workflow_dispatch:  
+  # 定义定时任务，每天04:00（UTC+8时间）执行
+  schedule:
+    - cron: '0 20 * * *'
+
+
+# 定义工作流中的各个作业
+jobs:
+  LEDE:
+    uses: ./.github/workflows/WRT-CORE-LEDE.yml 
+  OWRT:
+    uses: ./.github/workflows/WRT-CORE-OWRT.yml
+  LIBWRT:
+    uses: ./.github/workflows/WRT-CORE-LIBWRT.yml
