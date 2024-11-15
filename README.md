@@ -20,7 +20,7 @@ LEDE: https://github.com/coolsnowwolf/lede.git
 
 OWR&LibWRT: 带NSS的6.6内核固件，默认主题为Argon；默认使用nftables防火墙（fw4）。
 
-LEDE: 带NSS的6.1内核固件，默认主题为Argon；默认使用fw3防火墙iptables。
+LEDE: 带NSS的6.1内核固件，默认主题为Argon；默认使用nftables防火墙（fw4）。
 
 额外的软件包
 
