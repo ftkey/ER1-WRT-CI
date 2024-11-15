@@ -161,8 +161,8 @@ jobs:
         run: |
           cd ./$WRT_WORKSPACE/package/
 
-          $GITHUB_WORKSPACE/Scripts/Packages.sh $GITHUB_WORKSPACE
-          $GITHUB_WORKSPACE/Scripts/Handles.sh $GITHUB_WORKSPACE
+          $GITHUB_WORKSPACE/Scripts/Packages.sh $WRT_WORKSPACE
+          $GITHUB_WORKSPACE/Scripts/Handles.sh $WRT_WORKSPACE
 
       - name: Custom Settings
         run: |
@@ -172,7 +172,7 @@ jobs:
 
           cat $GITHUB_WORKSPACE/Config/$WRT_TARGET.txt $GITHUB_WORKSPACE/Config/GENERAL.txt >> .config
 
-          $GITHUB_WORKSPACE/Scripts/Settings.sh $GITHUB_WORKSPACE
+          $GITHUB_WORKSPACE/Scripts/Settings.sh $WRT_WORKSPACE
 
           make defconfig -j$(nproc)
 
