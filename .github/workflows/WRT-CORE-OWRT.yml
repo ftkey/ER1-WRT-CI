@@ -14,7 +14,7 @@ jobs:
       #max-parallel: 3
       matrix:
         TARGET: [IPQ60XX-WIFI-NO]
-        SOURCE: [LiBwrt-op/openwrt-6.x]
+        SOURCE: [VIKINGYFY/immortalwrt]
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       #编译平台
