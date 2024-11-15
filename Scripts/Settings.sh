@@ -34,13 +34,13 @@ if [ -n "$WRT_PACKAGE" ]; then
 	echo "$WRT_PACKAGE" >> ./.config
 fi
 
-#高通平台调整
-if [[ $WRT_TARGET == *"OWRT"* || $WRT_TARGET == *"LIBWRT"* || $WRT_TARGET == *"IMMWRT"*]]; then
-	#取消nss相关feed
-	echo "CONFIG_FEED_nss_packages=n" >> ./.config
-	echo "CONFIG_FEED_sqm_scripts_nss=n" >> ./.config
+if [[ $WRT_WORKSPACE == *"OWRT"* || $WRT_WORKSPACE == *"LIBWRT"* || $WRT_WORKSPACE == *"IMMWRT"* ]]; then
+    # 取消nss相关feed
+    echo "CONFIG_FEED_nss_packages=n" >> ./.config
+    echo "CONFIG_FEED_sqm_scripts_nss=n" >> ./.config
 fi
-if [[ $WRT_TARGET == *"LEDE"*]]; then
+
+if [[ $WRT_WORKSPACE == *"LEDE"*]]; then
 	#取消自带科学相关feed
 	echo "CONFIG_FEED_helloworld=n" >> ./.config
 fi
