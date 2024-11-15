@@ -11,7 +11,7 @@ sed -i "s/\.ssid=.*/\.ssid=$WRT_WIFI/g" $(find ./package/kernel/mac80211/ ./pack
 #调整位置
 sed -i 's/services/system/g' $(find ./feeds/luci/applications/luci-app-ttyd/ -type f -name "luci-app-ttyd.json")
 sed -i '3 a\\t\t"order": 10,' $(find ./feeds/luci/applications/luci-app-ttyd/ -type f -name "luci-app-ttyd.json")
-sed -i 's/services/nas/g' $(find ./feeds/luci/applications/luci-app-alist/ -type f -name "luci-app-alist.json")
+#sed -i 's/services/nas/g' $(find ./feeds/luci/applications/luci-app-alist/ -type f -name "luci-app-alist.json")
 sed -i 's/services/nas/g' $(find ./feeds/luci/applications/luci-app-samba4/ -type f -name "luci-app-samba4.json")
 sed -i 's/services/network/g' $(find ./feeds/luci/applications/luci-app-upnp/ -type f -name "luci-app-upnp.json")
 
@@ -40,7 +40,7 @@ if [[ $WRT_WORKSPACE == *"OWRT"* || $WRT_WORKSPACE == *"LIBWRT"* || $WRT_WORKSPA
     echo "CONFIG_FEED_sqm_scripts_nss=n" >> ./.config
 fi
 
-if [[ $WRT_WORKSPACE == *"LEDE"*]]; then
-	#取消自带科学相关feed
-	echo "CONFIG_FEED_helloworld=n" >> ./.config
+if [[ $WRT_WORKSPACE == *"LEDE"* ]]; then
+    # 取消自带科学相关feed
+    echo "CONFIG_FEED_helloworld=n" >> ./.config
 fi
