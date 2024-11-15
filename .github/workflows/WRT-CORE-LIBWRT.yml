@@ -11,7 +11,9 @@ jobs:
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       #编译平台
-      WRT_TARGET: LIBWRT
+      WRT_TARGET: IPQ60XX-WIFI-NO
+      #编译空间
+      WRT_WORKSPACE: LIBWRT
       #默认主题
       WRT_THEME: argon
       #默认主机名
