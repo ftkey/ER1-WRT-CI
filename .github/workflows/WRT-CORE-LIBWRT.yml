@@ -8,6 +8,14 @@ on:
 
 jobs:
   LIBWRT:
+    config:
+      name: ${{matrix.TARGET}}
+      strategy:
+        fail-fast: false
+        #max-parallel: 3
+        matrix:
+          TARGET: [IPQ60XX-WIFI-NO]
+          SOURCE: [VIKINGYFY/immortalwrt]
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       #编译平台
@@ -25,9 +33,11 @@ jobs:
       #默认密码，仅作提示，修改无用
       WRT_PW: 无
       #源码链接
-      WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
+      WRT_REPO: https://github.com/${{matrix.SOURCE}}.git
       #源码分支
       WRT_BRANCH: main
+      #源码名称
+      WRT_SOURCE: ${{matrix.SOURCE}}
       #插件调整
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       #仅输出配置文件
