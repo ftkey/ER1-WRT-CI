@@ -125,9 +125,9 @@ else
 	fi
 fi
 # LiBwrt 6.12不支持qmi
-if [[ $WRT_SOURCE == *"LiBwrt"* ]]; then
-    echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=n" >> ./.config
-    echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-fibocom=n" >> ./.config
-    echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=n" >> ./.config
-	echo "LiBwrt CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=n!"
-fi
+#if [[ $WRT_SOURCE == *"LiBwrt"* ]]; then
+#    echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=n" >> ./.config
+#    echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-fibocom=n" >> ./.config
+#    echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=n" >> ./.config
+#	echo "LiBwrt CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=n!"
+#fi
