@@ -38,6 +38,7 @@ sed -i '3 a\\t\t"order": 10,' $(find ./**/luci-app-ttyd/root/usr/share/luci/menu
 sed -i 's/services/network/g' $(find ./**/luci-app-upnp/root/usr/share/luci/menu.d/ -type f -name "luci-app-upnp.json")
 sed -i 's/services/nas/g' $(find ./**/luci-app-alist/root/usr/share/luci/menu.d/ -type f -name "luci-app-alist.json")
 sed -i 's/services/nas/g' $(find ./**/luci-app-openlist/root/usr/share/luci/menu.d/ -type f -name "luci-app-openlist.json")
+sed -i 's/services/nas/g' $(find ./**/luci-app-openlist/root/usr/share/luci/menu.d/ -type f -name "luci-app-openlist2.json")
 
 sed -i 's/admin\/status/admin\/vpn/g' $(find ./**/luci-proto-wireguard/root/usr/share/luci/menu.d/ -type f -name "luci-proto-wireguard.json")
 
