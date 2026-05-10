@@ -97,6 +97,7 @@ if [ -n "$WRT_PACKAGE" ]; then
 fi
 
 #高通平台调整
+DTS_PATH="./target/linux/qualcommax/dts/"
 if [[ $WRT_TARGET == *"IPQ"* ]]; then
 	#取消nss相关feed
 	echo "CONFIG_FEED_nss_packages=n" >> ./.config
@@ -104,6 +105,10 @@ if [[ $WRT_TARGET == *"IPQ"* ]]; then
 	#设置NSS版本
 	echo "CONFIG_NSS_FIRMWARE_VERSION_11_4=n" >> ./.config
 	echo "CONFIG_NSS_FIRMWARE_VERSION_12_5=y" >> ./.config
+	echo "CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y" >> ./.config
+	#无WIFI配置调整Q6大小
+	find $DTS_PATH -type f ! -iname '*nowifi*' -exec sed -i 's/ipq\(6018\|8074\).dtsi/ipq\1-nowifi.dtsi/g' {} +
+	echo "qualcommax set up nowifi successfully!"
 fi
 
 #编译器优化
