@@ -7,7 +7,7 @@ ls -an $PKG_PATH
 #预置HomeProxy数据
 HP_DIR="$(find "$PKG_PATH" -maxdepth 1 -type d -name '*homeproxy*' -print -quit)"
 if [ -n "$HP_DIR" ]; then
-	echo " "
+	echo "$HP_DIR"
 
 	HP_RESOURCES="$HP_DIR/root/etc/homeproxy/resources"
 	HP_DASHBOARD="$HP_DIR/root/etc/homeproxy/dashboard"
