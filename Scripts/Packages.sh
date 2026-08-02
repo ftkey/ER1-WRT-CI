@@ -32,7 +32,7 @@ UPDATE_PACKAGE() {
 
 #UPDATE_PACKAGE "包名" "项目地址" "项目分支" "pkg/name，可选，pkg为从大杂烩中单独提取包名插件；name为重命名为包名"
 UPDATE_PACKAGE "argon" "ftkey/openwrt_pkgs" "main" "pkg"
-UPDATE_PACKAGE "homeproxy" "ftkey/openwrt_pkgs" "main" "pkg"
+UPDATE_PACKAGE "luci-app-homeproxy-pkgs" "ftkey/openwrt_pkgs" "main" "pkg"
 UPDATE_PACKAGE "nikki" "ftkey/openwrt_pkgs" "main" "pkg"
 UPDATE_PACKAGE "passwall" "ftkey/openwrt_pkgs" "main" "pkg"
 UPDATE_PACKAGE "vlmcsd" "ftkey/openwrt_pkgs" "main" "pkg"
