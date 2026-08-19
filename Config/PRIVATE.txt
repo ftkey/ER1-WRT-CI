@@ -1,0 +1,66 @@
+# 自定义私有配置文件
+#
+# 此文件会在编译时由 Settings.sh 自动追加到 .config (最后追加，优先级最高)
+# 用于添加上游配置文件中没有的 CONFIG_ 选项，或覆盖上游的默认值
+# make defconfig 会自动处理依赖关系，无需手动解决依赖
+#
+
+# ============================================================
+# DDNS 脚本 (上游没有)
+# ============================================================
+CONFIG_PACKAGE_ddns-scripts-aliyun=y
+CONFIG_PACKAGE_ddns-scripts-dnspod=y
+CONFIG_PACKAGE_ddns-scripts-cloudflare=y
+
+# ============================================================
+# 增加插件 (上游没有或未启用)
+# ============================================================
+CONFIG_PACKAGE_luci-app-advancedplus=y
+CONFIG_PACKAGE_luci-app-cpufreq=y
+CONFIG_PACKAGE_luci-app-ddns=y
+CONFIG_PACKAGE_luci-app-onliner=y
+CONFIG_PACKAGE_luci-app-socat=y
+CONFIG_PACKAGE_luci-app-ttyd=y
+CONFIG_PACKAGE_luci-app-zerotier=y
+CONFIG_PACKAGE_luci-app-openlist2=y
+CONFIG_PACKAGE_luci-app-nikki=y
+CONFIG_PACKAGE_luci-app-tailscale=y
+
+# ============================================================
+# 禁用插件 (覆盖上游 =y 或移除不需要的)
+# ============================================================
+CONFIG_PACKAGE_luci-app-alist=n
+CONFIG_PACKAGE_luci-app-accesscontrol=n
+CONFIG_PACKAGE_luci-app-adbyby-plus=n
+CONFIG_PACKAGE_luci-app-advancedsetting=n
+CONFIG_PACKAGE_luci-app-arpbind=n
+CONFIG_PACKAGE_luci-app-autoreboot=n
+CONFIG_PACKAGE_luci-app-diskman=n
+CONFIG_PACKAGE_luci-app-fileassistant=n
+CONFIG_PACKAGE_luci-app-filetransfer=n
+CONFIG_PACKAGE_luci-app-gecoosac=n
+CONFIG_PACKAGE_luci-app-ipsec-vpnd=n
+CONFIG_PACKAGE_luci-app-mini-diskmanager=n
+CONFIG_PACKAGE_luci-app-msd_lite=n
+CONFIG_PACKAGE_luci-app-nlbwmon=n
+CONFIG_PACKAGE_luci-app-openvpn-server=n
+CONFIG_PACKAGE_luci-app-partexp=n
+CONFIG_PACKAGE_luci-app-sqm=n
+CONFIG_PACKAGE_luci-app-unblockmusic=n
+CONFIG_PACKAGE_luci-app-upnp=n
+CONFIG_PACKAGE_luci-app-vlmcsd=n
+CONFIG_PACKAGE_luci-app-vsftpd=n
+CONFIG_PACKAGE_luci-app-wol=n
+CONFIG_PACKAGE_luci-app-xlnetacc=n
+CONFIG_PACKAGE_luci-i18n-passwall=n
+
+# ============================================================
+# 禁用主题 (使用 aurora + 自维护 argon，不需要其他主题)
+# ============================================================
+CONFIG_PACKAGE_luci-theme-argon=y
+CONFIG_PACKAGE_luci-app-argon-config=n
+CONFIG_PACKAGE_luci-theme-kucat=n
+CONFIG_PACKAGE_luci-app-kucat-config=n
+CONFIG_PACKAGE_luci-theme-noobwrt=n
+CONFIG_PACKAGE_luci-theme-shadcn=n
+CONFIG_PACKAGE_luci-theme-fluent=n
