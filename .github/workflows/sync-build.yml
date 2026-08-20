@@ -1,0 +1,203 @@
+# SPDX-License-Identifier: MIT
+# 同步工作流 - 拉取上游并创建 build-* 分支触发编译 (分支归档模型)
+#
+# 完整流程: 同步 (本文件, 建 build-<时间戳> 分支) → 编译 (build-firmware.yml) → 归档 (build-firmware.yml)
+#
+# 为什么用"每次构建一个独立时间戳分支"而非 repository_dispatch:
+#   1. main 永远只保留自定义文件，不被上游污染，也无需 cleanup 的 KEEP_FILES 轮询。
+#   2. 每次构建 = 一个 self-contained 分支 build-YYYYMMDD-HHMM = 全量上游 + 自定义补丁。
+#      push 到 build-* 即触发编译，可复用工作流 WRT-CORE.yml 在当前分支最新提交上解析，
+#      编译必需的上游文件 (Packages.sh / Handles.sh / Settings.sh / Config/*.txt)
+#      天然都在该分支上，文件永不缺失。
+#   3. 编译成功后 build-firmware.yml 把该分支打 tag 归档并删除，目录保持干净，构建留痕可追溯。
+#
+# ============================================================
+# 使用方法
+# ============================================================
+# 在 GitHub 仓库页面: Settings → Secrets and variables → Actions → Variables
+# 添加以下变量 (可选，不设置则使用默认值):
+#
+#   WRT_THEME  - 默认主题          默认: aurora
+#   WRT_NAME   - 主机名            默认: OWRT
+#   WRT_SSID   - WiFi 名称         默认: OWRT
+#   WRT_WORD   - WiFi 密码         默认: 12345678
+#   WRT_IP     - 管理地址          默认: 192.168.10.1
+#   WRT_PW     - 密码提示 (仅展示) 默认: 无
+#
+# ============================================================
+# 手动操作提示
+# ============================================================
+# 手动测试 (仅输出配置，不编译): 到 Actions → Build Firmware → 手动 Select 一个 build-* 分支，
+#   勾选 TEST 即可。手动加插件包: 在本工作流手动触发时填写 PACKAGE，会烧录进该分支的
+#   Config/PRIVATE.txt。
+#
+# 编译平台在 build-firmware.yml 的 matrix.include 中配置，本文件不涉及
+# 此文件为自定义文件，同步时不参与上游覆盖
+
+name: Sync & Build
+
+on:
+  # 自动编译: 每天北京时间 06:00 (UTC 22:00)。cron 只在默认分支 (main) 上运行
+  schedule:
+    - cron: '0 22 * * *'
+  # 手动触发: 创建 build 分支前可选填写要附加的插件包
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '手动调整插件包，多个请用\n符号隔开。'
+        required: false
+        type: string
+
+permissions: write-all
+
+jobs:
+  # 第一步: 拉取上游，如需要则创建新的 build-<时间戳> 分支并推送 (main 保持不动)
+  sync:
+    name: Sync Upstream -> Build Branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Backup Custom Files
+        run: |
+          # main 只保留这些自定义文件。创建 build 分支前先备份，稍后覆盖到新分支
+          mkdir -p /tmp/backup/Scripts /tmp/backup/Config /tmp/backup/.github/workflows
+          [ -f Scripts/PRIVATE.sh ] && cp Scripts/PRIVATE.sh /tmp/backup/Scripts/ && echo "backed up: Scripts/PRIVATE.sh"
+          [ -f Config/PRIVATE.txt ] && cp Config/PRIVATE.txt /tmp/backup/Config/ && echo "backed up: Config/PRIVATE.txt"
+          [ -f .github/workflows/sync-build.yml ] && cp .github/workflows/sync-build.yml /tmp/backup/.github/workflows/ && echo "backed up: sync-build.yml"
+          [ -f .github/workflows/build-firmware.yml ] && cp .github/workflows/build-firmware.yml /tmp/backup/.github/workflows/ && echo "backed up: build-firmware.yml"
+          [ -f README.md ] && cp README.md /tmp/backup/ && echo "backed up: README.md"
+
+      - name: Add Upstream Remote
+        run: |
+          git remote add upstream https://github.com/VIKINGYFY/OpenWRT-CI.git
+          git fetch upstream main
+
+      - name: Check Upstream Updates
+        id: check_update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 手动触发: 强制编译
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "need_compile=true" >> $GITHUB_OUTPUT
+            echo "手动触发，强制编译"
+            exit 0
+          fi
+          # 定时触发: 检查上游 48 小时内是否有提交
+          SOURCE="VIKINGYFY/immortalwrt"
+          BRANCH="main"
+          LAST_COMMIT_DATE=$(curl -sL -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/$SOURCE/commits?sha=$BRANCH&per_page=1" | jq -r '.[0].commit.committer.date')
+          if [ -n "$LAST_COMMIT_DATE" ] && [ "$LAST_COMMIT_DATE" != "null" ]; then
+            NOW=$(date -u +%s)
+            COMMIT_TS=$(date -u -d "$LAST_COMMIT_DATE" +%s)
+            HOURS_AGO=$(( (NOW - COMMIT_TS) / 3600 ))
+            if [ $HOURS_AGO -lt 48 ]; then
+              echo "need_compile=true" >> $GITHUB_OUTPUT
+              echo "上游 ${HOURS_AGO} 小时前有更新，将进行编译"
+            else
+              echo "need_compile=false" >> $GITHUB_OUTPUT
+              echo "!!! 上游 ${HOURS_AGO} 小时内无更新，跳过编译 !!!"
+            fi
+          else
+            echo "need_compile=true" >> $GITHUB_OUTPUT
+            echo "无法获取上游信息，默认编译"
+          fi
+
+      - name: Create Build Branch & Overlay Custom Files
+        if: steps.check_update.outputs.need_compile == 'true'
+        run: |
+          # 以时间戳命名全新分支，基于上游 main 创建 (自带全量上游编译必需文件)
+          BRANCH="build-$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH" upstream/main
+          echo "已创建分支: $BRANCH"
+
+          # 覆盖自定义文件到该分支 (不在上游中的文件，手工放置)
+          mkdir -p Scripts Config .github/workflows
+          [ -f /tmp/backup/Scripts/PRIVATE.sh ] && cp /tmp/backup/Scripts/PRIVATE.sh Scripts/PRIVATE.sh && echo "overlaid: Scripts/PRIVATE.sh"
+          [ -f /tmp/backup/Config/PRIVATE.txt ] && cp /tmp/backup/Config/PRIVATE.txt Config/PRIVATE.txt && echo "overlaid: Config/PRIVATE.txt"
+          [ -f /tmp/backup/.github/workflows/sync-build.yml ] && cp /tmp/backup/.github/workflows/sync-build.yml .github/workflows/sync-build.yml && echo "overlaid: sync-build.yml"
+          [ -f /tmp/backup/.github/workflows/build-firmware.yml ] && cp /tmp/backup/.github/workflows/build-firmware.yml .github/workflows/build-firmware.yml && echo "overlaid: build-firmware.yml"
+          [ -f /tmp/backup/README.md ] && cp /tmp/backup/README.md README.md && echo "overlaid: README.md"
+
+          # 手动填写 PACKAGE 时，烧录进 PRIVATE.txt (.config 最后追加，优先级最高)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.PACKAGE }}" ]; then
+            echo -e "${{ inputs.PACKAGE }}" >> Config/PRIVATE.txt
+            echo "已烧录手动插件包到 Config/PRIVATE.txt"
+          fi
+
+          # 临时记录分支名供后续步骤使用
+          echo "$BRANCH" > /tmp/build_branch
+
+      - name: Disable Upstream Auto-Triggers
+        if: steps.check_update.outputs.need_compile == 'true'
+        run: |
+          # 新分支包含上游全部 .github/workflows，禁用其自动触发 (schedule + workflow_run)
+          # 避免 push build-* 分支时连带触发上游的 OWRT/MTK/QCA 编译和 Auto/Cache-Clean
+
+          # 1. 编译触发器: 移除 workflow_run 自动触发
+          for FILE in OWRT-ALL.yml MTK-ALL.yml QCA-ALL.yml; do
+            PATH_FILE=".github/workflows/$FILE"
+            if [ -f "$PATH_FILE" ]; then
+              sed -i '/#自动编译/,/- completed/d' "$PATH_FILE"
+              echo "disabled workflow_run: $FILE"
+            fi
+          done
+
+          # 2. Auto-Clean: 移除 schedule 定时触发
+          AC_FILE=".github/workflows/Auto-Clean.yml"
+          if [ -f "$AC_FILE" ]; then
+            sed -i '/#自动清理/d; /schedule:/d; /cron:/d' "$AC_FILE"
+            echo "disabled schedule: Auto-Clean.yml"
+          fi
+
+          # 3. Cache-Clean: 移除 schedule 定时触发
+          CC_FILE=".github/workflows/Cache-Clean.yml"
+          if [ -f "$CC_FILE" ]; then
+            sed -i '/#自动清理/d; /schedule:/d; /cron:/d' "$CC_FILE"
+            echo "disabled schedule: Cache-Clean.yml"
+          fi
+
+      - name: Patch WRT-CORE (seed.config)
+        if: steps.check_update.outputs.need_compile == 'true'
+        run: |
+          # 给 WRT-CORE.yml 打补丁: 生成并上传 seed.config
+          # 注意: 不再打 "checkout ref main" 补丁。分支模型下 WRT-CORE 的 checkout
+          #       默认检出触发事件的 build-<时间戳> 分支 (该分支已含全部必需文件)，
+          #       若强制 ref: main 反而会引用不含这些文件的主分支，必须移除。
+          WRT_CORE=".github/workflows/WRT-CORE.yml"
+          if [ -f "$WRT_CORE" ]; then
+            # 1. make defconfig 后生成 seed.config
+            if ! grep -q 'diffconfig.sh' "$WRT_CORE"; then
+              sed -i 's|make defconfig -j$(nproc) && make clean -j$(nproc)|make defconfig -j$(nproc) \&\& ./scripts/diffconfig.sh > seed.config \&\& make clean -j$(nproc)|' "$WRT_CORE"
+              echo "patched WRT-CORE: seed.config generation"
+            fi
+            # 2. Package Firmware 中上传 seed.config
+            if ! grep -q 'Seed-"$WRT_CONFIG"' "$WRT_CORE"; then
+              sed -i 's|\(cp -f \./.config \./upload/.*\)|\1\n          [ -f ./seed.config ] \&\& cp -f ./seed.config ./upload/Seed-"$WRT_CONFIG"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt|' "$WRT_CORE"
+              echo "patched WRT-CORE: seed.config upload"
+            fi
+          else
+            echo "WRT-CORE not found, skipping"
+          fi
+
+      - name: Commit and Push Build Branch
+        if: steps.check_update.outputs.need_compile == 'true'
+        run: |
+          BRANCH="$(cat /tmp/build_branch)"
+          git add -A
+          UPSTREAM_HASH=$(git log upstream/main -1 --format='%h')
+          UPSTREAM_MSG=$(git log upstream/main -1 --format='%s')
+          # 若上游文件无变化 (理论不会，因源自上游 main)，仍确保有提交以触发编译
+          git commit -m "build: create $BRANCH (upstream ${UPSTREAM_HASH} ${UPSTREAM_MSG})" || true
+          git push -u origin "refs/heads/$BRANCH"
+          echo "已推送 $BRANCH ，将触发 Build Firmware 编译"

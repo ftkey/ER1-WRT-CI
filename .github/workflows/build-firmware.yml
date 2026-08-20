@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: MIT
+# 编译工作流 - push 到 build-* 分支时自动触发 (分支归档模型)
+#
+# 完整流程: 同步 (sync-build.yml 创建 build-<时间戳> 分支) → 编译 (本文件) → 归档 (本文件)
+#
+# 为什么用分支触发而非 repository_dispatch:
+#   sync-build.yml 每次从上游 main 创建一个 self-contained 分支 build-YYYYMMDD-HHMM，
+#   该分支 = 全量上游 + 自定义补丁。push 到 build-* 即触发编译，
+#   可复用工作流 WRT-CORE.yml 在当前分支最新提交上解析，编译必需文件 (Packages.sh /
+#   Handles.sh / Settings.sh / Config/*.txt) 永远齐全，不会出现 "文件缺失" 的经典问题。
+#   main 仅保留自定义文件，不被上游污染，也不需要 cleanup 反复调 KEEP_FILES。
+#
+# ============================================================
+# 编译平台
+# ============================================================
+# 如需增减编译平台，修改下方 matrix.include 配置
+# 此文件为自定义文件，同步期间会被拷贝到 build-* 分支，不参与上游覆盖
+
+name: Build Firmware
+
+# 运行列表显示名称，带上分支名便于识别是哪次构建
+run-name: Build Firmware ${{ github.ref_name }}
+
+on:
+  # 自动触发: sync-build 推送 build-* 分支即编译
+  push:
+    branches: ['build-*']
+  # 手动触发: 需 Select 一个已存在的 build-* 分支 (不能选 main，它没有 WRT-CORE)
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '手动调整插件包，多个请用\n符号隔开。'
+        required: false
+        type: string
+      TEST:
+        description: '仅输出配置文件，不编译固件。'
+        default: 'false'
+        required: false
+        type: boolean
+
+permissions: write-all
+
+# 同一分支同一时间只允许一个构建运行
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # 第一步: 编译固件 (基于触发的 build-* 分支，调用 WRT-CORE 核心)
+  build:
+    name: ${{ matrix.CONFIG }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- QUALCOMMAX IPQ60XX 平台 (与上游源码分支保持 main) ---
+          - CONFIG: IPQ60XX-WIFI-NO
+            SOURCE: VIKINGYFY/immortalwrt
+            BRANCH: main
+
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      # 编译配置
+      WRT_CONFIG: ${{ matrix.CONFIG }}
+      # ★ 固件参数 (从 GitHub 仓库变量读取，未设置则使用默认值)
+      WRT_THEME: ${{ vars.WRT_THEME || 'aurora' }}
+      WRT_NAME: ${{ vars.WRT_NAME || 'OWRT' }}
+      WRT_SSID: ${{ vars.WRT_SSID || 'OWRT' }}
+      WRT_WORD: ${{ vars.WRT_WORD || '12345678' }}
+      WRT_IP: ${{ vars.WRT_IP || '192.168.10.1' }}
+      WRT_PW: ${{ vars.WRT_PW || '无' }}
+      # 源码配置
+      WRT_REPO: https://github.com/${{ matrix.SOURCE }}.git
+      WRT_BRANCH: ${{ matrix.BRANCH }}
+      WRT_SOURCE: ${{ matrix.SOURCE }}
+      # 手动调整:
+      #   自动触发 (push) 时 PACKAGE 已由 sync 烧录进该分支的 Config/PRIVATE.txt，
+      #   此处填空即可；仅 workflow_dispatch 手动触发时使用输入。
+      WRT_PACKAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.PACKAGE || '' }}
+      WRT_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.TEST || 'false' }}
+
+  # 第二步: 编译成功后归档并删除 build 分支 (main 始终不参与，无需 KEEP_FILES 清理)
+  archive:
+    name: Tag & Remove Build Branch
+    needs: build
+    if: ${{ always() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Archive and Remove Build Branch
+        run: |
+          # 归档: 把本次构建的提交打一个与分支同名的 tag，删除分支后 tag 即留痕
+          BRANCH="${GITHUB_REF_NAME}"
+          echo "处理分支: $BRANCH"
+
+          if git rev-parse "refs/tags/$BRANCH" >/dev/null 2>&1; then
+            echo "tag $BRANCH 已存在，跳过打标"
+          else
+            git tag "$BRANCH"
+            git push origin "refs/tags/$BRANCH"
+            echo "已归档为 tag: $BRANCH"
+          fi
+
+          # 删除 build 分支 (编译产物已在 Release/Artifacts/tag 中，数据不丢)
+          git push origin --delete "refs/heads/$BRANCH" && echo "已删除 build 分支 $BRANCH" \
+            || echo "分支删除失败或已被删除"
+          # 同步清理本地分支引用
+          git branch -D "$BRANCH" 2>/dev/null || true
