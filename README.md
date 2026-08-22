@@ -1,64 +1,119 @@
-# 高质量<免费>交流群
+# OpenWRT-CI Custom
 
-点击链接加入群聊【IPQ技术讨论群】：https://qm.qq.com/q/v7nMhzB4oU
-该群为普通交流群。
+![Sync & Build](https://github.com/ftkey/ER1-WRT-CI/actions/workflows/sync-build.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/ftkey/ER1-WRT-CI?label=最新固件)
+![Release Date](https://img.shields.io/github/release-date/ftkey/ER1-WRT-CI?label=发布日期)
 
-# 高质量<付费>中转站
+基于 [VIKINGYFY/OpenWRT-CI](https://github.com/VIKINGYFY/OpenWRT-CI) 的自定义云编译固件仓库。编译前自动同步上游更新，通过补丁脚本和配置文件修改，自动化打包编译 OpenWRT/ImmortalWrt 固件，全流程无需手动干预。
 
-点击链接加入群聊【LiBwrt-Ai学习】：https://qm.qq.com/q/HTa7OiWNCU
-该群为AI中转站群。
+## 自动化流程
 
-# 本地编译器
+```
+06:00  Sync & Build  →  同步工作流 (唯一自动任务)
+  ├─ backup   备份 main 上的自定义文件
+  ├─ check    检测上游 48h 内是否有更新
+  └─ branch   有更新时从上游 main 新建 build-<时间戳> 分支并推送 (自带全量上游 + 自定义文件)
+06:05  Build Firmware →  编译工作流 (push 到 build-* 分支自动触发)
+  ├─ build    调用 WRT-CORE 编译固件
+  └─ archive  编译成功后把该分支打 tag 归档并删除，main 始终不参与
+```
 
-https://github.com/VIKINGYFY/OWRT-Tools.git
+> 为什么每次构建用独立分支？每次编译 = 一个 self-contained 分支 `build-YYYYMMDD-HHMM`（全量上游 + 自定义补丁），push 触发编译时 `WRT-CORE.yml` 在该分支最新提交上解析，编译必需文件永远齐全。`main` 仅保留自定义文件，不被上游污染，也无需 Cleanup 反复清文件。
 
-# 自用修改版插件
+编译流程 (WRT-CORE): 检出项目 → 初始化环境 → 克隆源码 → 更新 Feeds → 自定义插件包 (`Packages.sh` → `PRIVATE.sh`) → 自定义设置 (`Settings.sh` → `PRIVATE.txt`) → 下载 & 编译 → 打包发布 Release。
 
-https://github.com/VIKINGYFY/packages.git
+## 目录结构
 
-# OpenWRT-CI
+```
+.github/workflows/
+  sync-build.yml      # ★ 同步工作流: 同步上游 + 新建 build-* 分支触发编译 (自定义)
+  build-firmware.yml  # ★ 编译工作流: 调用 WRT-CORE 编译 + tag 归档删除分支 (自定义)
+  WRT-CORE.yml        # 编译核心流程 (上游，仅在 build-* 分支上，编译前自动打补丁)
+  OWRT/MTK/QCA-ALL.yml、Auto-Clean.yml、Cache-Clean.yml  # 上游，自动触发已禁用
+Scripts/
+  Packages.sh / Settings.sh / Handles.sh   # 上游脚本 (只在 build-* 分支)
+  PRIVATE.sh          # ★ 自定义补丁脚本
+Config/
+  *.txt               # 各平台编译配置 (上游，只在 build-* 分支)
+  PRIVATE.txt         # ★ 自定义配置项
+```
 
-官方版：
+> ★ 为自定义文件，仅存在于 `main`（及每次拷贝到 `build-*` 分支），同步时不会被覆盖。标注 (上游) 的文件随每次构建从上游拉到 `build-*` 分支，编译完成后该分支被删除，`main` 始终保持极简。
 
-https://github.com/immortalwrt/immortalwrt.git
+## 自定义方式
 
-自用版：
+### 1. GitHub 仓库变量 - 固件参数
 
-https://github.com/VIKINGYFY/immortalwrt.git
+在 **Settings → Secrets and variables → Actions → Variables** 添加变量，未设置则用默认值：
 
-# U-BOOT
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `WRT_THEME` | 默认主题 | `aurora` |
+| `WRT_NAME` | 主机名 | `OWRT` |
+| `WRT_SSID` | WiFi 名称 | `OWRT` |
+| `WRT_WORD` | WiFi 密码 | `12345678` |
+| `WRT_IP` | 管理地址 | `192.168.10.1` |
+| `WRT_PW` | 密码提示 (仅展示) | `无` |
 
-高通版-沉心：
+### 2. Scripts/PRIVATE.sh - 补丁脚本
 
-https://github.com/chenxin527/uboot-qsdk12.5-build.git
+编译配置被读取前执行，可修改配置文件、安装自定义软件包。
 
-高通版-小猪：
+### 3. Config/PRIVATE.txt - 配置项
 
-https://github.com/1980490718/u-boot-2016.git
+编译时自动追加到 `.config`，用于添加上游配置中没有的选项，`make defconfig` 自动处理依赖。
 
-联发科-全新版：
+## 快速开始
 
-https://github.com/VIKINGYFY/UBOOT-CI/releases
+1. 将仓库文件推送到你的 GitHub 仓库
+2. (可选) 添加固件参数变量
+3. 等待每天 06:00 自动编译 (自动同步 + 编译 + 清理)
+4. 在 **Releases** 页面下载固件
 
-联发科-官方版：
+## 编译平台
 
-https://drive.wrt.moe/uboot/mediatek
+默认只编译 IPQ60XX (无 WiFi)，可在 `build-firmware.yml` 的 `matrix.include` 修改：
 
-# 固件简要说明
+| 配置名 | 平台 | 源码分支 |
+|--------|------|----------|
+| IPQ60XX-WIFI-NO | IPQ60XX (无 WiFi) | main |
 
-固件每天早上5点自动编译。
+### 支持设备
 
-固件信息里的时间为编译开始的时间，方便核对上游源码提交时间。
+`PRIVATE.sh` 默认启用的设备（在 `Scripts/PRIVATE.sh` 中修改）：
 
-MEDIATEK系列、QUALCOMMAX系列、ROCKCHIP系列、X86系列。
+| 设备代号 | 设备名称 |
+|----------|----------|
+| `jdcloud_re-ss-01` | 京东云无线宝 亚瑟 AX1800 Pro (IPQ6000) |
+| `jdcloud_re-cs-07` | 京东云无线宝 太乙 ER1 |
 
-# 目录简要说明
+## 编译产物
 
-workflows——自定义CI配置
+编译成功后发布到 **Releases**，每个 Release 包含：
 
-Scripts——自定义脚本
+| 文件 | 说明 |
+|------|------|
+| `Config-*.txt` | 完整编译配置 (`.config` 副本) |
+| `Seed-*.txt` | 精简配置 (`diffconfig` 输出，可复现编译) |
+| `*.bin` / `*.tar.gz` | 固件镜像，按设备区分 |
 
-Config——自定义配置
+Release 标签: `配置名-源码-分支-日期时间`，如 `IPQ60XX-WIFI-NO-immortalwrt-main-26.08.14-06.30.00`。
 
-#
-[![Stargazers over time](https://starchart.cc/VIKINGYFY/OpenWRT-CI.svg?variant=adaptive)](https://starchart.cc/VIKINGYFY/OpenWRT-CI)
+## 常见问题
+
+**同步后自定义文件会丢失吗？** 不会。`PRIVATE.sh`、`PRIVATE.txt`、`sync-build.yml`、`build-firmware.yml`、`README.md` 仅存在于 `main` 且同步时受保护，每次建 `build-*` 分支时再拷贝进去，永不丢失。
+
+**为什么上游触发器不自动运行了？** 生成 `build-*` 分支时自动移除上游工作流的自动触发器（`workflow_run` / `schedule`），仅保留手动触发，自动编译完全由 `Sync & Build` + `Build Firmware` 接管。
+
+**编译完成后上游文件会被删除吗？** 会，但方式变了。Build Firmware 编译成功后把该 `build-*` 分支打同名的 tag 归档并删除整个分支，因此包括 `Scripts/Packages.sh`、`Handles.sh`、`Settings.sh`、`Config/*.txt` 在内的所有上游文件随分支一起消失，`main` 始终保持极简、不被上游污染。下次编译时由 `Sync & Build` 重新从上游创建新分支，周而复始。
+
+**编译失败？** 检查 Actions 日志 → 勾选 `TEST` 仅生成配置检查 `.config` → 运行 `Cache-Clean` 清缓存 → 重新触发 `Sync & Build` 手动重新同步。
+
+## 致谢
+
+- [VIKINGYFY/OpenWRT-CI](https://github.com/VIKINGYFY/OpenWRT-CI) - 上游云编译项目
+- [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt) - OpenWrt 源码
+
+## License
+
+MIT
