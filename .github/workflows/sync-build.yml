@@ -209,5 +209,7 @@ jobs:
           UPSTREAM_MSG=$(git log upstream/main -1 --format='%s')
           # 若上游文件无变化 (理论不会，因源自上游 main)，仍确保有提交以触发编译
           git commit -m "build: create $BRANCH (upstream ${UPSTREAM_HASH} ${UPSTREAM_MSG})" || true
-          git push -u origin "refs/heads/$BRANCH"
+          # build-latest 为固定分支，每次从上游 main 重置，远端已有旧提交时普通 push 会被拒绝
+          # (non-fast-forward)。该分支仅作缓存载体 + 触发编译，不承载历史，强制推送安全。
+          git push -f -u origin "refs/heads/$BRANCH"
           echo "已推送 $BRANCH ，将触发 Build Firmware 编译"
