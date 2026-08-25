@@ -78,7 +78,8 @@ jobs:
       #   自动触发 (push) 时 PACKAGE 已由 sync 烧录进该分支的 Config/PRIVATE.txt，
       #   此处填空即可；仅 workflow_dispatch 手动触发时使用输入。
       WRT_PACKAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.PACKAGE || '' }}
-      WRT_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.TEST || 'false' }}
+      # 上游 WRT-CORE 的 WRT_TEST 为 boolean 类型，必须传布尔值而非字符串 'false'
+      WRT_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.TEST || false }}
 
   # 第二步: 编译成功后归档并删除 build 分支 (main 始终不参与，无需 KEEP_FILES 清理)
   archive:
