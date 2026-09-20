@@ -24,8 +24,10 @@ run-name: Build Firmware ${{ github.ref_name }}
 
 on:
   # 自动触发: sync-build 推送 build-latest 分支即编译 (固定分支名以命中缓存)
+  # paths-ignore .sync-state: archive 步骤确认编译状态后推送该文件，不应再次触发编译
   push:
     branches: ['build-latest']
+    paths-ignore: ['.sync-state']
   # 手动触发: 需 Select build-latest 分支 (不能选 main，它没有 WRT-CORE)
   workflow_dispatch:
     inputs:
@@ -98,6 +100,22 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update Sync State
+        run: |
+          # 编译成功: 将 .sync-state 的 DONE 推进为 TARGET (本次实际编译的 immortalwrt hash)，
+          # 使下次定时同步能精确判断"自上次成功编译后是否有更新"。
+          # 仅推送 .sync-state 文件，被 push 的 paths-ignore 过滤，不会再次触发编译。
+          TARGET=$(grep '^TARGET=' .sync-state 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+          if [ -z "$TARGET" ]; then
+            echo ".sync-state 不存在或无 TARGET，跳过状态更新"
+            exit 0
+          fi
+          printf 'TARGET=%s\nDONE=%s\n' "$TARGET" "$TARGET" > .sync-state
+          git add .sync-state
+          git commit -m "build: confirm sync state (DONE=${TARGET:0:10})" || { echo "无变更，跳过"; exit 0; }
+          git push origin build-latest || git push -f origin build-latest
+          echo "已确认同步状态: DONE=$TARGET"
 
       - name: Keep Build Branch (Cache Persistence)
         run: |

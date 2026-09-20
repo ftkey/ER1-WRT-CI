@@ -78,6 +78,10 @@ jobs:
           [ -f .github/workflows/sync-build.yml ] && cp .github/workflows/sync-build.yml /tmp/backup/.github/workflows/ && echo "backed up: sync-build.yml"
           [ -f .github/workflows/build-firmware.yml ] && cp .github/workflows/build-firmware.yml /tmp/backup/.github/workflows/ && echo "backed up: build-firmware.yml"
           [ -f README.md ] && cp README.md /tmp/backup/ && echo "backed up: README.md"
+          # .sync-state: build-latest 分支上记录"上次成功编译的源码 hash"，重建分支前备份
+          if git rev-parse --verify origin/build-latest >/dev/null 2>&1; then
+            git show origin/build-latest:.sync-state > /tmp/backup/.sync-state 2>/dev/null && echo "backed up: .sync-state"
+          fi
 
       - name: Add Upstream Remote
         run: |
@@ -95,25 +99,36 @@ jobs:
             echo "手动触发，强制编译"
             exit 0
           fi
-          # 定时触发: 检查上游 48 小时内是否有提交
-          SOURCE="VIKINGYFY/immortalwrt"
-          BRANCH="main"
-          LAST_COMMIT_DATE=$(curl -sL -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/$SOURCE/commits?sha=$BRANCH&per_page=1" | jq -r '.[0].commit.committer.date')
-          if [ -n "$LAST_COMMIT_DATE" ] && [ "$LAST_COMMIT_DATE" != "null" ]; then
-            NOW=$(date -u +%s)
-            COMMIT_TS=$(date -u -d "$LAST_COMMIT_DATE" +%s)
-            HOURS_AGO=$(( (NOW - COMMIT_TS) / 3600 ))
-            if [ $HOURS_AGO -lt 48 ]; then
-              echo "need_compile=true" >> $GITHUB_OUTPUT
-              echo "上游 ${HOURS_AGO} 小时前有更新，将进行编译"
-            else
-              echo "need_compile=false" >> $GITHUB_OUTPUT
-              echo "!!! 上游 ${HOURS_AGO} 小时内无更新，跳过编译 !!!"
-            fi
-          else
-            echo "need_compile=true" >> $GITHUB_OUTPUT
-            echo "无法获取上游信息，默认编译"
+          # 定时触发: 双源对比 (精确判断，替代旧的时间窗口逻辑)
+          #   源1: OpenWRT-CI (build-latest 分支的内容来源) -> git 祖先判断
+          #   源2: immortalwrt (编译源码) -> 与 .sync-state 记录的"上次成功编译 hash"对比
+          # 保险: 确保远端 build-latest ref 已拉取 (checkout fetch-depth:0 已含全部分支)
+          git fetch origin build-latest 2>/dev/null || true
+
+          # 源2: 获取 immortalwrt main 当前 hash
+          SRC_HASH=$(curl -sL -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/VIKINGYFY/immortalwrt/commits/main" | jq -r '.sha')
+          echo "immortalwrt main HEAD: ${SRC_HASH:0:10}"
+
+          # 读取上次成功编译状态 (DONE=上次编译确认过的源码 hash)
+          DONE_HASH=""
+          if git rev-parse --verify origin/build-latest >/dev/null 2>&1; then
+            DONE_HASH=$(git show origin/build-latest:.sync-state 2>/dev/null | sed -n 's/^DONE=//p' | tr -d '[:space:]')
           fi
+          echo "上次成功编译源码: ${DONE_HASH:0:10} (空=无记录)"
+
+          NEED="false"
+          if ! git rev-parse --verify origin/build-latest >/dev/null 2>&1; then
+            NEED="true"; echo "原因: build-latest 分支不存在，需首次构建"
+          elif ! git merge-base --is-ancestor upstream/main origin/build-latest 2>/dev/null; then
+            NEED="true"; echo "原因: OpenWRT-CI 有更新，build-latest 未包含最新上游"
+          elif [ "$DONE_HASH" != "$SRC_HASH" ]; then
+            NEED="true"; echo "原因: immortalwrt 有更新或上次编译未确认 (${DONE_HASH:0:10} != ${SRC_HASH:0:10})"
+          else
+            echo "原因: 双源均无更新，跳过编译"
+          fi
+
+          echo "need_compile=$NEED" >> $GITHUB_OUTPUT
+          echo "SRC_HASH=$SRC_HASH" >> $GITHUB_OUTPUT
 
       - name: Create Build Branch & Overlay Custom Files
         if: steps.check_update.outputs.need_compile == 'true'
@@ -131,6 +146,12 @@ jobs:
           [ -f /tmp/backup/.github/workflows/sync-build.yml ] && cp /tmp/backup/.github/workflows/sync-build.yml .github/workflows/sync-build.yml && echo "overlaid: sync-build.yml"
           [ -f /tmp/backup/.github/workflows/build-firmware.yml ] && cp /tmp/backup/.github/workflows/build-firmware.yml .github/workflows/build-firmware.yml && echo "overlaid: build-firmware.yml"
           [ -f /tmp/backup/README.md ] && cp /tmp/backup/README.md README.md && echo "overlaid: README.md"
+
+          # 写入同步状态: TARGET=本次将编译的 immortalwrt hash, DONE=上次成功编译 hash (保留旧值，
+          # 编译成功由 build-firmware.yml 的 archive 步骤确认后才把 DONE 推进到 TARGET)
+          OLD_DONE=$(grep '^DONE=' /tmp/backup/.sync-state 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+          printf 'TARGET=%s\nDONE=%s\n' "${{ steps.check_update.outputs.SRC_HASH }}" "$OLD_DONE" > .sync-state
+          echo "sync-state: TARGET=${{ steps.check_update.outputs.SRC_HASH }} DONE=$OLD_DONE"
 
           # 手动填写 PACKAGE 时，烧录进 PRIVATE.txt (.config 最后追加，优先级最高)
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.PACKAGE }}" ]; then

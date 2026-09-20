@@ -11,11 +11,11 @@
 ```
 06:00  Sync & Build  →  同步工作流 (唯一自动任务)
   ├─ backup   备份 main 上的自定义文件
-  ├─ check    检测上游 48h 内是否有更新
+  ├─ check    双源对比: OpenWRT-CI git 祖先判断 + immortalwrt hash 对比 .sync-state 记录
   └─ branch   有更新时从上游 main 重置 build-latest 固定分支并推送 (自带全量上游 + 自定义文件)
 06:05  Build Firmware →  编译工作流 (push 到 build-latest 分支自动触发)
   ├─ build    调用 WRT-CORE 编译固件，Release 挂载到 build-<WRT_DATE> 时间戳 tag
-  └─ archive  保留 build-latest 分支 (缓存复用)，main 始终不参与
+  └─ archive  确认 .sync-state 编译状态 + 保留 build-latest 分支 (缓存复用)，main 始终不参与
 ```
 
 > 为什么用固定 `build-latest` 分支而非时间戳分支？GitHub Actions 缓存按分支隔离，固定分支名才能命中上次缓存，大幅提速；时间戳分支每次全新，缓存永远 miss，导致全量编译。每次构建 = 一个 self-contained 分支 `build-latest`（全量上游 + 自定义补丁），push 触发编译时 `WRT-CORE.yml` 在该分支最新提交上解析，编译必需文件永远齐全。`main` 仅保留自定义文件，不被上游污染，也无需 Cleanup 反复清文件。构建留痕由 Release tag（`build-<WRT_DATE>` 时间戳）承担。
